@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bravo Culinary Solutions — Production Planner</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','sans-serif']},colors:{brand:{50:'#f0fdf4',100:'#dcfce7',500:'#22c55e',600:'#16a34a',700:'#15803d',800:'#166534',900:'#14532d'}}}}}</script>
+    <style>
+        [x-cloak]{display:none!important}
+        .custom-scrollbar::-webkit-scrollbar{width:6px;height:6px}
+        .custom-scrollbar::-webkit-scrollbar-track{background:#f1f5f9}
+        .custom-scrollbar::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover{background:#94a3b8}
+        .drag-over{border-color:#10b981!important;background:#ecfdf5!important}
+        .fade-in{animation:fadeIn .3s ease-in}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        .tab-content{display:none}.tab-content.active{display:block}
+        .slot-select:focus,.slot-qty:focus{box-shadow:0 0 0 2px rgba(16,185,129,.4);z-index:5;position:relative}
+        .day-col.checked-day{background:rgba(16,185,129,.04)!important}
+        .materials-panel{transition:max-height .3s ease,opacity .3s ease}
+    </style>
+</head>
+<body class="h-full flex flex-col text-slate-800 antialiased font-sans bg-slate-50">
+<div id="app" class="flex h-screen overflow-hidden">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0 z-20 shadow-xl">
+        <div class="p-5 flex items-center gap-3 border-b border-slate-800">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-emerald-900/30"><i class="fa-solid fa-utensils"></i></div>
+            <div><h1 class="font-bold text-white leading-tight text-sm">BRAVO CULINARY</h1><span class="text-xs text-emerald-400 font-medium tracking-wide uppercase">Production Planner</span></div>
+        </div>
+        <nav class="flex-1 p-4 space-y-1 overflow-y-auto custom-scrollbar">
+            <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all text-white bg-slate-800"><i class="fa-solid fa-chart-pie w-5 text-center text-emerald-400"></i><span>Dashboard</span></button>
+            <button onclick="switchTab('planning')" id="nav-planning" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all hover:bg-slate-800 hover:text-white"><i class="fa-solid fa-calendar-check w-5 text-center text-emerald-400"></i><span>Production Planner</span></button>
+            <button onclick="switchTab('inventory')" id="nav-inventory" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all hover:bg-slate-800 hover:text-white"><i class="fa-solid fa-boxes-stacked w-5 text-center text-emerald-400"></i><span>Inventory & Stock</span></button>
+            <button onclick="switchTab('bom')" id="nav-bom" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all hover:bg-slate-800 hover:text-white"><i class="fa-solid fa-flask-vial w-5 text-center text-emerald-400"></i><span>Recipes & BOM</span></button>
+            <button onclick="switchTab('importer')" id="nav-importer" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all hover:bg-slate-800 hover:text-white"><i class="fa-solid fa-file-csv w-5 text-center text-emerald-400"></i><span>CSV Importer</span></button>
+        </nav>
+        <div class="p-4 border-t border-slate-800 text-xs text-slate-400 bg-slate-950/40">
+            <div class="flex justify-between items-center mb-1"><span>Products:</span><span id="stat-products-count" class="font-semibold text-slate-200">0</span></div>
+            <div class="flex justify-between items-center mb-1"><span>BOM Recipes:</span><span id="stat-boms-count" class="font-semibold text-slate-200">0</span></div>
+        </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50">
+        <header class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shrink-0 shadow-sm">
+            <div><h2 id="page-title" class="text-xl font-bold text-slate-800">Production Dashboard</h2><p id="page-subtitle" class="text-xs text-slate-500 mt-0.5">Overview</p></div>
+            <div class="flex items-center gap-3">
+                <button onclick="switchTab('importer')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium px-3.5 py-2 rounded-lg text-sm flex items-center gap-2 border border-slate-200"><i class="fa-solid fa-file-import text-xs"></i><span>Import CSVs</span></button>
+            </div>
+        </header>
+        <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-md"></div>
+        <div class="flex-1 overflow-y-auto p-6 custom-scrollbar" id="tab-content">
+
+            <!-- DASHBOARD -->
+            <div id="tab-dashboard" class="tab-content active space-y-6 fade-in">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total SKUs</p><h3 id="kpi-total-skus" class="text-2xl font-bold text-slate-800 mt-1">0</h3><p class="text-xs text-slate-400 mt-1"><span id="kpi-finished-goods">0</span> with Recipes</p></div>
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Low Stock</p><h3 id="kpi-low-stock" class="text-2xl font-bold text-amber-600 mt-1">0</h3></div>
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Active BOMs</p><h3 id="kpi-bom-count" class="text-2xl font-bold text-purple-600 mt-1">0</h3></div>
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Planned Today</p><h3 id="kpi-planned" class="text-2xl font-bold text-emerald-600 mt-1">0</h3></div>
+                </div>
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h3 class="font-bold text-slate-800 mb-2 text-sm">Stock by Category</h3><div class="relative min-h-[220px]"><canvas id="chartCategory"></canvas></div></div>
+                    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm lg:col-span-2"><h3 class="font-bold text-slate-800 mb-3 text-sm">Products Overview</h3><div id="dashboard-products-list" class="text-xs text-slate-500 max-h-[250px] overflow-y-auto custom-scrollbar"></div></div>
+                </div>
+            </div>
+
+            <!-- PLANNING — Weekly Slots -->
+            <div id="tab-planning" class="tab-content space-y-4 fade-in">
+                <!-- Week Navigation -->
+                <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                        <button onclick="shiftWeek(-1)" class="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><i class="fa-solid fa-chevron-left"></i></button>
+                        <span id="planning-week-label" class="text-sm font-bold text-slate-800 min-w-[220px] text-center"></span>
+                        <button onclick="shiftWeek(1)" class="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><i class="fa-solid fa-chevron-right"></i></button>
+                        <button onclick="goToThisWeek()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 font-medium">Today</button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-slate-400">Slots per day:</span>
+                        <select id="slots-count" onchange="renderPlanning()" class="border border-slate-200 rounded-lg px-2 py-1 text-xs text-slate-700 bg-white">
+                            <option value="5">5</option>
+                            <option value="8">8</option>
+                            <option value="10" selected>10</option>
+                            <option value="15">15</option>
+                        </select>
+                        <button onclick="clearWeek()" class="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg font-medium ml-2"><i class="fa-solid fa-trash"></i> Clear Week</button>
+                    </div>
+                </div>
+
+                <!-- Main Weekly Grid -->
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div id="planning-week-container" class="overflow-x-auto custom-scrollbar p-4"></div>
+                </div>
+
+                <!-- Materials Calculation Panel -->
+                <div id="materials-panel" class="hidden bg-white rounded-xl border border-emerald-200 shadow-sm overflow-hidden">
+                    <div class="bg-emerald-50 px-5 py-3 border-b border-emerald-200 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-calculator text-emerald-600"></i>
+                            <h3 class="font-bold text-emerald-800 text-sm">Raw Materials Required</h3>
+                            <span id="materials-day-label" class="text-xs text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full font-semibold"></span>
+                        </div>
+                        <button onclick="exportMaterialsCSV()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-1.5 rounded-lg text-xs flex items-center gap-1.5 shadow-sm">
+                            <i class="fa-solid fa-file-export"></i> Export Materials CSV
+                        </button>
+                    </div>
+                    <div id="materials-content" class="p-5"></div>
+                </div>
+            </div>
+
+            <!-- INVENTORY -->
+            <div id="tab-inventory" class="tab-content space-y-6 fade-in">
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex items-center gap-3 flex-1 min-w-[280px]">
+                        <div class="relative flex-1"><i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i><input type="text" id="inventory-search" oninput="renderInventory()" placeholder="Search..." class="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"></div>
+                        <select id="inventory-category-filter" onchange="renderInventory()" class="border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-700 bg-white"><option value="ALL">All</option></select>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="exportInventoryCSV()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium px-3 py-1.5 rounded-lg text-xs border border-slate-200"><i class="fa-solid fa-file-export"></i> Export</button>
+                        <button onclick="openModal('add-product-modal')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-3.5 py-1.5 rounded-lg text-xs"><i class="fa-solid fa-plus"></i> New</button>
+                    </div>
+                </div>
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-left text-sm"><thead class="bg-slate-50 text-slate-500 font-medium text-xs uppercase tracking-wider border-b border-slate-200"><tr><th class="py-3 px-4">SKU</th><th class="py-3 px-4">Product</th><th class="py-3 px-4">Category</th><th class="py-3 px-4">SOH</th><th class="py-3 px-4">Unit</th><th class="py-3 px-4">Cost</th><th class="py-3 px-4">Min</th><th class="py-3 px-4">Status</th><th class="py-3 px-4 text-right">Actions</th></tr></thead><tbody id="inventory-table-body" class="divide-y divide-slate-100"></tbody></table></div></div>
+            </div>
+
+            <!-- BOM -->
+            <div id="tab-bom" class="tab-content space-y-6 fade-in">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col h-[650px]">
+                        <div class="flex items-center justify-between mb-3"><h3 class="font-bold text-slate-800 text-sm">Recipes</h3><button onclick="openModal('add-bom-modal')" class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-2.5 py-1 rounded-md">+ Add</button></div>
+                        <input type="text" id="bom-search" oninput="renderBOMList()" placeholder="Filter..." class="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg mb-3 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+                        <div id="bom-items-list" class="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-1"></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-2 h-[650px] flex flex-col overflow-y-auto custom-scrollbar" id="bom-detail-container">
+                        <div class="text-center py-20 text-slate-400"><i class="fa-solid fa-flask-vial text-4xl mb-3 opacity-40"></i><p class="text-sm font-medium">Select a recipe to view.</p></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CSV IMPORTER -->
+            <div id="tab-importer" class="tab-content space-y-6 fade-in">
+                <div class="bg-slate-900 text-white p-6 rounded-2xl shadow-lg"><div class="max-w-2xl">
+                    <span class="inline-block bg-emerald-500/20 text-emerald-400 text-xs font-semibold px-2.5 py-1 rounded-md mb-2">CSV Import</span>
+                    <h3 class="text-xl font-bold mb-2">Import Product & BOM Files</h3>
+                    <p class="text-slate-300 text-xs">Upload <code class="bg-slate-700 px-1 rounded">ProductExport-*.csv</code> for stock and <code class="bg-slate-700 px-1 rounded">BOMExport*.csv</code> for recipes.</p>
+                    <button onclick="loadSampleData()" class="mt-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3.5 py-2 rounded-lg"><i class="fa-solid fa-wand-magic-sparkles"></i> Load Demo Data</button>
+                </div></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-white p-6 rounded-xl border-2 border-dashed border-slate-300 hover:border-emerald-500 transition-all text-center flex flex-col items-center justify-center min-h-[220px] relative" id="drop-zone-product">
+                        <input type="file" id="file-input-product" accept=".csv" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleCSVUpload(event,'product')">
+                        <div class="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center text-xl mb-3"><i class="fa-solid fa-boxes-stacked"></i></div>
+                        <h4 class="font-bold text-slate-800 text-sm">Products & Stock CSV</h4>
+                        <p class="text-xs text-slate-500 mt-1">SKU, Name, SOH, Category, Cost</p>
+                        <span class="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg"><i class="fa-solid fa-upload"></i> Upload</span>
+                        <div id="product-upload-status" class="mt-2 text-xs"></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl border-2 border-dashed border-slate-300 hover:border-teal-500 transition-all text-center flex flex-col items-center justify-center min-h-[220px] relative" id="drop-zone-bom">
+                        <input type="file" id="file-input-bom" accept=".csv" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="handleCSVUpload(event,'bom')">
+                        <div class="w-12 h-12 bg-teal-50 text-teal-600 rounded-full flex items-center justify-center text-xl mb-3"><i class="fa-solid fa-diagram-project"></i></div>
+                        <h4 class="font-bold text-slate-800 text-sm">BOM / Recipes CSV</h4>
+                        <p class="text-xs text-slate-500 mt-1">Parent SKU, Ingredient, Qty</p>
+                        <span class="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-teal-600 bg-teal-50 px-3 py-1.5 rounded-lg"><i class="fa-solid fa-upload"></i> Upload</span>
+                        <div id="bom-upload-status" class="mt-2 text-xs"></div>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm"><h4 class="font-bold text-slate-800 text-sm mb-3"><i class="fa-solid fa-table text-emerald-600"></i> Import Preview</h4><div id="import-preview-content" class="text-xs text-slate-500"><p>No CSV uploaded yet.</p></div></div>
+            </div>
+
+        </div>
+    </main>
+</div>
+
+<!-- MODALS -->
+<div id="add-product-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3"><h3 class="font-bold text-slate-800 text-base">New Item</h3><button onclick="closeModal('add-product-modal')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button></div>
+        <form id="form-add-product" onsubmit="handleSaveProduct(event)" class="grid grid-cols-2 gap-3 text-xs">
+            <div><label class="block font-medium text-slate-700 mb-1">SKU</label><input type="text" id="prod-sku" required class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-emerald-500"></div>
+            <div><label class="block font-medium text-slate-700 mb-1">Category</label><input type="text" id="prod-category" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-emerald-500"></div>
+            <div class="col-span-2"><label class="block font-medium text-slate-700 mb-1">Name</label><input type="text" id="prod-name" required class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-emerald-500"></div>
+            <div><label class="block font-medium text-slate-700 mb-1">SOH</label><input type="number" id="prod-stock" min="0" step="any" value="0" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-emerald-500"></div>
+            <div><label class="block font-medium text-slate-700 mb-1">Unit</label><input type="text" id="prod-uom" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-emerald-500"></div>
+            <div><label class="block font-medium text-slate-700 mb-1">Cost</label><input type="number" id="prod-cost" min="0" step="0.01" value="0" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-emerald-500"></div>
+            <div><label class="block font-medium text-slate-700 mb-1">Min Stock</label><input type="number" id="prod-min" min="0" step="any" value="0" class="w-full border border-slate-300 rounded-lg p-2 focus:ring-2 focus:ring-emerald-500"></div>
+            <div class="col-span-2 pt-3 flex justify-end gap-2 border-t border-slate-100"><button type="button" onclick="closeModal('add-product-modal')" class="px-4 py-2 rounded-lg bg-slate-100 text-slate-700">Cancel</button><button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white">Save</button></div>
+        </form>
+    </div>
+</div>
+<div id="add-bom-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-xl w-full p-6 space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3"><h3 class="font-bold text-slate-800 text-base">Recipe BOM</h3><button onclick="closeModal('add-bom-modal')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button></div>
+        <form id="form-add-bom" onsubmit="handleSaveBOM(event)" class="space-y-4 text-xs">
+            <div><label class="block font-medium text-slate-700 mb-1">Finished Product</label><select id="bom-parent-sku" required class="w-full border border-slate-300 rounded-lg p-2"></select></div>
+            <div><div class="flex justify-between items-center mb-1"><label class="font-medium text-slate-700">Ingredients</label><button type="button" onclick="addBOMIngredientRow()" class="text-emerald-600 hover:underline font-semibold">+ Add</button></div><div id="bom-ingredients-container" class="space-y-2 max-h-52 overflow-y-auto pr-1"></div></div>
+            <div class="pt-3 flex justify-end gap-2 border-t border-slate-100"><button type="button" onclick="closeModal('add-bom-modal')" class="px-4 py-2 rounded-lg bg-slate-100 text-slate-700">Cancel</button><button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white">Save</button></div>
+        </form>
+    </div>
+</div>
+
+<script>
+/*************************************************************
+ * STATE
+ *************************************************************/
+let state={activeTab:'dashboard',selectedBOMSKU:null,products:[],boms:{},bomParentQty:{}};
+let categoryChartInstance=null;
+let planningWeekStart=getMonday(new Date());
+// planningData: key = "YYYY-MM-DD", value = array of 10 slots: [{sku, qty}]
+let planningData={};
+let checkedDays={}; // key = dateStr, value = true/false
+
+function getMonday(d){const dt=new Date(d);const day=dt.getDay();const diff=dt.getDate()-day+(day===0?-6:1);dt.setDate(diff);dt.setHours(0,0,0,0);return dt;}
+function formatDateStr(d){return d.toISOString().split('T')[0];}
+function shiftWeek(dir){planningWeekStart.setDate(planningWeekStart.getDate()+(dir*7));renderPlanning();}
+function goToThisWeek(){planningWeekStart=getMonday(new Date());renderPlanning();}
+function getWeekDates(){const dates=[];for(let i=0;i<7;i++){const d=new Date(planningWeekStart);d.setDate(planningWeekStart.getDate()+i);dates.push(d);}return dates;}
+
+function getSlots(dateStr){
+    const numSlots=parseInt(document.getElementById('slots-count')?.value||'10');
+    if(!planningData[dateStr])planningData[dateStr]=[];
+    // Ensure correct length
+    while(planningData[dateStr].length<numSlots)planningData[dateStr].push({sku:'',qty:''});
+    if(planningData[dateStr].length>numSlots)planningData[dateStr]=planningData[dateStr].slice(0,numSlots);
+    return planningData[dateStr];
+}
+
+function savePlanning(){try{localStorage.setItem('bravo_planning',JSON.stringify({planningData,checkedDays}));}catch(e){}}
+function loadPlanning(){try{const s=localStorage.getItem('bravo_planning');if(s){const d=JSON.parse(s);planningData=d.planningData||{};checkedDays=d.checkedDays||{};}}catch(e){}}
+
+function getFinishedProducts(){return state.products.filter(p=>state.boms[p.sku]);}
+
+/*************************************************************
+ * CSV IMPORT
+ *************************************************************/
+function handleCSVUpload(event,type){const file=event.target.files[0];if(!file)return;Papa.parse(file,{header:true,skipEmptyLines:true,dynamicTyping:false,complete(r){if(type==='product')processProductCSV(r.data,file.name);else processBOMCSV(r.data,file.name);},error(e){showToast('Parse error: '+e.message,'error');}});}
+function findColumn(row,candidates){const keys=Object.keys(row);for(const c of candidates){const f=keys.find(k=>k.trim().toLowerCase()===c.toLowerCase());if(f)return f;}for(const c of candidates){const f=keys.find(k=>k.trim().toLowerCase().includes(c.toLowerCase()));if(f)return f;}return null;}
+
+function processProductCSV(data,fileName){
+    if(!data||!data.length){showToast('Empty CSV','error');return;}
+    const r=data[0];
+    const colSKU=findColumn(r,['Code','SKU','Style Code','Item Code']);
+    const colName=findColumn(r,['Product Name','Name','ProductName']);
+    const colCat=findColumn(r,['Category']);
+    const colSubCat=findColumn(r,['Sub Category']);
+    const colSOH=findColumn(r,['SOH','Stock On Hand','Stock']);
+    const colMin=findColumn(r,['Minimum Stock','Min Stock']);
+    const colCost=findColumn(r,['Cost HKD Exempt','Cost','UnitCost']);
+    const colUOM=findColumn(r,['Option 1','UOM','Unit']);
+    const colSupplier=findColumn(r,['Supplier']);
+    let imported=0;
+    data.forEach(row=>{
+        const sku=colSKU?String(row[colSKU]||'').trim():'';
+        const name=colName?String(row[colName]||'').trim():'';
+        if(!sku||!name)return;
+        const obj={sku,name,category:colCat?String(row[colCat]||'').trim():'',subCategory:colSubCat?String(row[colSubCat]||'').trim():'',stock:colSOH?parseFloat(row[colSOH])||0:0,minStock:colMin?parseFloat(row[colMin])||0:0,cost:colCost?parseFloat(row[colCost])||0:0,uom:colUOM?String(row[colUOM]||'').trim():'',supplier:colSupplier?String(row[colSupplier]||'').trim():''};
+        const idx=state.products.findIndex(p=>p.sku===sku);
+        if(idx>=0)state.products[idx]={...state.products[idx],...obj};else state.products.push(obj);
+        imported++;
+    });
+    updateCategoryFilters();
+    document.getElementById('product-upload-status').innerHTML=`<span class="text-emerald-600 font-semibold"><i class="fa-solid fa-check-circle"></i> ${imported} imported</span>`;
+    document.getElementById('import-preview-content').innerHTML=`<div class="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-lg mb-3 font-medium fade-in"><i class="fa-solid fa-circle-check"></i> <b>${fileName}</b> — ${imported} products loaded.</div>`;
+    showToast(`Imported ${imported} products!`,'success');refreshApp();
+}
+
+function processBOMCSV(data,fileName){
+    if(!data||!data.length){showToast('Empty BOM CSV','error');return;}
+    const r=data[0];
+    const colItemCode=findColumn(r,['Item Code','SKU','Product Code']);
+    const colItemName=findColumn(r,['Item Name','Name']);
+    const colItemQty=findColumn(r,['Item Qty','Qty','Quantity']);
+    const colRowFormat=findColumn(r,['Row Format','Type']);
+    const colBOM=findColumn(r,['BOM']);
+    const colOpt1=findColumn(r,['Option1','Option 1']);
+    let currentParent='';
+    const bomGroups={};
+    data.forEach(row=>{
+        const code=colItemCode?String(row[colItemCode]||'').trim():'';
+        const name=colItemName?String(row[colItemName]||'').trim():'';
+        const qty=colItemQty?parseFloat(row[colItemQty])||0:0;
+        const fmt=colRowFormat?String(row[colRowFormat]||'').trim().toLowerCase():'';
+        const bom=colBOM?String(row[colBOM]||'').trim():'';
+        const opt1=colOpt1?String(row[colOpt1]||'').trim():'';
+        if(!code)return;
+        const isParent=fmt==='parent'||fmt==='p'||bom.toLowerCase()==='make';
+        if(isParent){currentParent=code;if(!bomGroups[currentParent])bomGroups[currentParent]={parentSKU:code,parentName:name,parentQty:qty,ingredients:[]};}
+        else if(currentParent){bomGroups[currentParent].ingredients.push({ingredientSKU:code,ingredientName:name,qtyRequired:qty,unit:opt1||bom||''});}
+    });
+    let total=0;
+    Object.values(bomGroups).forEach(g=>{
+        if(!g.parentSKU||!g.ingredients.length)return;
+        if(!state.products.find(p=>p.sku===g.parentSKU))state.products.push({sku:g.parentSKU,name:g.parentName||g.parentSKU,category:'Finished Goods',subCategory:'',stock:0,minStock:0,cost:0,uom:'',supplier:''});
+        if(!state.boms[g.parentSKU])state.boms[g.parentSKU]=[];
+        if(g.parentQty)state.bomParentQty[g.parentSKU]=g.parentQty;
+        g.ingredients.forEach(ing=>{
+            if(!state.products.find(p=>p.sku===ing.ingredientSKU))state.products.push({sku:ing.ingredientSKU,name:ing.ingredientName||ing.ingredientSKU,category:'Raw Materials',subCategory:'',stock:0,minStock:0,cost:0,uom:ing.unit||'',supplier:''});
+            const existing=state.boms[g.parentSKU].find(i=>i.ingredientSKU===ing.ingredientSKU);
+            if(existing){existing.qtyRequired=ing.qtyRequired;existing.unit=ing.unit;}else{state.boms[g.parentSKU].push(ing);}
+            total++;
+        });
+    });
+    updateCategoryFilters();
+    document.getElementById('bom-upload-status').innerHTML=`<span class="text-teal-600 font-semibold"><i class="fa-solid fa-check-circle"></i> ${Object.keys(bomGroups).length} recipes</span>`;
+    document.getElementById('import-preview-content').innerHTML+=`<div class="bg-teal-50 border border-teal-200 text-teal-800 p-3 rounded-lg mb-3 font-medium fade-in"><i class="fa-solid fa-circle-check"></i> <b>${fileName}</b> — ${Object.keys(bomGroups).length} recipes, ${total} ingredients.</div>`;
+    showToast(`Imported ${Object.keys(bomGroups).length} recipes!`,'success');refreshApp();
+}
+
+function updateCategoryFilters(){
+    ['inventory-category-filter'].forEach(id=>{
+        const sel=document.getElementById(id);if(!sel)return;
+        const cats=[...new Set(state.products.map(p=>p.category).filter(Boolean))].sort();
+        const cur=sel.value;sel.innerHTML='<option value="ALL">All Categories</option>';
+        cats.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o);});
+        sel.value=cur||'ALL';
+    });
+}
+
+/*************************************************************
+ * DEMO DATA
+ *************************************************************/
+function loadSampleData(){
+    state.products=[
+        {sku:'K-PBOF4030',name:'Pici Bolognese Sauce 2kg',category:'Sauces',stock:100,minStock:0,cost:45,uom:'PKT',supplier:''},
+        {sku:'K-BOSF200',name:'Bolognese Sauce Frozen 2kg',category:'Sauces',stock:70,minStock:0,cost:40,uom:'PKT',supplier:''},
+        {sku:'K-MSWP500',name:'Mortadella Sliced Pistacchio 500g',category:'Pre-Sliced',stock:31,minStock:0,cost:44.65,uom:'PKT',supplier:''},
+        {sku:'K-BPMBWTS',name:'Meatballs Tomato Sauce ~2.5kg',category:'Ready to Eat',stock:87,minStock:0,cost:82.87,uom:'CS',supplier:''},
+        {sku:'K-CBPS300',name:'Cannellini Bean Potato Soup',category:'Soups',stock:120,minStock:0,cost:18,uom:'KG',supplier:''},
+        {sku:'V-CAR0245',name:'Carrot Cut China',category:'Vegetables',stock:200,minStock:50,cost:5.5,uom:'kg',supplier:''},
+        {sku:'V-CEL_CUT',name:'Celery Cut China',category:'Vegetables',stock:150,minStock:40,cost:6,uom:'kg',supplier:''},
+        {sku:'V-ONION_CUT',name:'Onion Cut China',category:'Vegetables',stock:180,minStock:30,cost:4,uom:'kg',supplier:''},
+        {sku:'DG-RCW1LT-PM',name:'Red Cooking Wine 1lt',category:'Dairy & Grocery',stock:80,minStock:20,cost:12,uom:'L',supplier:''},
+        {sku:'DG-FS25KG-TSC',name:'Fine Salt 25KG',category:'Dairy & Grocery',stock:50,minStock:10,cost:0.8,uom:'KG',supplier:''},
+        {sku:'M-271672',name:'Brazilian Beef Flank (KG)',category:'Meat',stock:105,minStock:20,cost:28,uom:'KG',supplier:''},
+        {sku:'M-BFMINCE',name:'Beef Mince Premium',category:'Meat',stock:120,minStock:30,cost:18.5,uom:'kg',supplier:''},
+        {sku:'DG-TPDM3.15KG-MR',name:'Tomato Paste Del Monte 3.15kg',category:'Dairy & Grocery',stock:40,minStock:10,cost:15,uom:'PC',supplier:''},
+        {sku:'DG-CAOI15L-TSC',name:'Canola Oil 15LT',category:'Dairy & Grocery',stock:30,minStock:5,cost:35,uom:'L',supplier:''},
+    ];
+    state.boms={
+        'K-PBOF4030':[{ingredientSKU:'V-CAR0245',ingredientName:'Carrot Cut China',qtyRequired:12,unit:''},{ingredientSKU:'V-CEL_CUT',ingredientName:'Celery Cut China',qtyRequired:12,unit:''},{ingredientSKU:'DG-RCW1LT-PM',ingredientName:'Red Cooking Wine 1lt',qtyRequired:20,unit:'L'},{ingredientSKU:'V-ONION_CUT',ingredientName:'Onion Cut China',qtyRequired:12,unit:''},{ingredientSKU:'DG-FS25KG-TSC',ingredientName:'Fine Salt 25KG',qtyRequired:0.8,unit:'KG'},{ingredientSKU:'DG-TPDM3.15KG-MR',ingredientName:'Tomato Paste Del Monte',qtyRequired:1,unit:'PC'},{ingredientSKU:'M-271672',ingredientName:'Brazilian Beef Flank',qtyRequired:105,unit:'KG'},{ingredientSKU:'DG-CAOI15L-TSC',ingredientName:'Canola Oil 15LT',qtyRequired:2,unit:'L'}],
+        'K-BOSF200':[{ingredientSKU:'V-CAR0245',ingredientName:'Carrot Cut China',qtyRequired:6,unit:''},{ingredientSKU:'V-CEL_CUT',ingredientName:'Celery Cut China',qtyRequired:6,unit:''},{ingredientSKU:'DG-RCW1LT-PM',ingredientName:'Red Cooking Wine 1lt',qtyRequired:10,unit:'L'},{ingredientSKU:'V-ONION_CUT',ingredientName:'Onion Cut China',qtyRequired:6,unit:''},{ingredientSKU:'M-271672',ingredientName:'Brazilian Beef Flank',qtyRequired:20,unit:'KG'},{ingredientSKU:'DG-CAOI15L-TSC',ingredientName:'Canola Oil 15LT',qtyRequired:2,unit:'L'}],
+        'K-BPMBWTS':[{ingredientSKU:'M-BFMINCE',ingredientName:'Beef Mince',qtyRequired:1.5,unit:'kg'}],
+    };
+    state.bomParentQty={'K-PBOF4030':100,'K-BOSF200':70};
+    planningData={};checkedDays={};
+    updateCategoryFilters();
+    showToast('Demo data loaded!','success');refreshApp();
+}
+
+/*************************************************************
+ * TABS
+ *************************************************************/
+function switchTab(tabId){
+    state.activeTab=tabId;
+    document.querySelectorAll('.nav-btn').forEach(b=>{b.classList.remove('bg-slate-800','text-white');b.classList.add('hover:bg-slate-800','hover:text-white');});
+    const a=document.getElementById('nav-'+tabId);if(a)a.classList.add('bg-slate-800','text-white');
+    document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));
+    const t=document.getElementById('tab-'+tabId);if(t)t.classList.add('active');
+    const titles={dashboard:{title:'Dashboard',sub:'Overview'},planning:{title:'Production Planner',sub:'Add products to daily slots, check materials needed'},inventory:{title:'Inventory',sub:'Manage stock levels'},bom:{title:'Recipes & BOM',sub:'View formulations'},importer:{title:'CSV Importer',sub:'Upload files'}};
+    if(titles[tabId]){document.getElementById('page-title').textContent=titles[tabId].title;document.getElementById('page-subtitle').textContent=titles[tabId].sub;}
+    refreshApp();
+}
+function refreshApp(){
+    document.getElementById('stat-products-count').textContent=state.products.length;
+    document.getElementById('stat-boms-count').textContent=Object.keys(state.boms).length;
+    if(state.activeTab==='dashboard')renderDashboard();
+    else if(state.activeTab==='planning')renderPlanning();
+    else if(state.activeTab==='inventory')renderInventory();
+    else if(state.activeTab==='bom'){renderBOMList();renderBOMDetail();}
+}
+
+/*************************************************************
+ * DASHBOARD
+ *************************************************************/
+function renderDashboard(){
+    document.getElementById('kpi-total-skus').textContent=state.products.length;
+    document.getElementById('kpi-finished-goods').textContent=getFinishedProducts().length;
+    document.getElementById('kpi-low-stock').textContent=state.products.filter(p=>p.stock>0&&p.minStock>0&&p.stock<=p.minStock).length;
+    document.getElementById('kpi-bom-count').textContent=Object.keys(state.boms).length;
+    // Count today's slots
+    const today=formatDateStr(new Date());
+    const todaySlots=(planningData[today]||[]).filter(s=>s.sku&&s.qty>0);
+    document.getElementById('kpi-planned').textContent=todaySlots.length+' items';
+    // Products list
+    const list=document.getElementById('dashboard-products-list');
+    list.innerHTML=state.products.slice(0,20).map(p=>`<div class="flex items-center justify-between py-1.5 px-2 hover:bg-slate-50 rounded"><div><span class="font-semibold text-slate-800">${p.name}</span><span class="text-slate-400 ml-2 font-mono">${p.sku}</span></div><span class="font-bold text-slate-700">${p.stock} ${p.uom}</span></div>`).join('');
+    // Chart
+    const ctx=document.getElementById('chartCategory');if(!ctx)return;
+    const cats={};state.products.forEach(p=>{const c=p.category||'Other';cats[c]=(cats[c]||0)+1;});
+    if(categoryChartInstance)categoryChartInstance.destroy();
+    categoryChartInstance=new Chart(ctx,{type:'doughnut',data:{labels:Object.keys(cats),datasets:[{data:Object.values(cats),backgroundColor:['#10b981','#3b82f6','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#f97316'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:10}}}},cutout:'70%'}});
+}
+
+/*************************************************************
+ * PLANNING — Weekly Slot View
+ *************************************************************/
+function renderPlanning(){
+    loadPlanning();
+    const container=document.getElementById('planning-week-container');
+    if(!container)return;
+    const dates=getWeekDates();
+    const numSlots=parseInt(document.getElementById('slots-count')?.value||'10');
+
+    // Week label
+    const wl=document.getElementById('planning-week-label');
+    if(wl){const s=dates[0].toLocaleDateString('en-US',{month:'short',day:'numeric'});const e=dates[6].toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});wl.textContent=s+' — '+e;}
+
+    const dayNames=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const finished=getFinishedProducts();
+    const allProducts=state.products;
+
+    // Build dropdown options HTML (shared)
+    const optionsHTML='<option value="">— Select Product —</option>'+allProducts.map(p=>`<option value="${p.sku}">${p.name}</option>`).join('');
+
+    let html='<table class="w-full border-collapse" style="min-width:1100px"><thead><tr>';
+
+    // Header row with day names, dates, and checkboxes
+    dates.forEach((d,i)=>{
+        const ds=formatDateStr(d);
+        const isToday=ds===formatDateStr(new Date());
+        const isChecked=checkedDays[ds]||false;
+        html+=`<th class="p-2 text-center align-top ${isToday?'bg-emerald-50':'bg-slate-50'} border border-slate-200" style="min-width:155px">
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] font-bold uppercase ${isToday?'text-emerald-700':'text-slate-500'}">${dayNames[i]}</span>
+                <label class="flex items-center gap-1 cursor-pointer">
+                    <input type="checkbox" ${isChecked?'checked':''} onchange="toggleDayCheck('${ds}',this.checked)" class="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+                    <span class="text-[10px] text-slate-400">Calc</span>
+                </label>
+            </div>
+            <div class="text-lg font-bold ${isToday?'text-emerald-800':'text-slate-800'}">${d.getDate()}</div>
+            <div class="text-[10px] text-slate-400 mb-1">${d.toLocaleDateString('en-US',{month:'short',year:'numeric'})}</div>
+            <div class="text-[10px] text-slate-400" id="day-total-${ds}"></div>
+        </th>`;
+    });
+    html+='</tr></thead><tbody>';
+
+    // Slot rows
+    for(let slot=0;slot<numSlots;slot++){
+        html+='<tr>';
+        dates.forEach((d,i)=>{
+            const ds=formatDateStr(d);
+            const slots=getSlots(ds);
+            const s=slots[slot]||{sku:'',qty:''};
+            html+=`<td class="p-1 border border-slate-200 align-top">
+                <div class="flex items-center gap-1">
+                    <select onchange="onSlotChange('${ds}',${slot},'sku',this.value)" class="slot-select flex-1 min-w-0 text-[11px] font-medium text-slate-800 border border-slate-200 rounded px-1 py-1 bg-white truncate focus:outline-none" style="max-width:110px">
+                        ${optionsHTML.replace(`value="${s.sku}"`,s.sku?`value="${s.sku}" selected`:'')}
+                    </select>
+                    <input type="number" value="${s.qty||''}" min="0" step="any" placeholder="Qty"
+                        onchange="onSlotChange('${ds}',${slot},'qty',this.value)"
+                        onfocus="this.select()"
+                        class="slot-qty w-14 text-center text-[11px] font-bold border border-slate-200 rounded px-1 py-1 focus:outline-none ${s.qty>0?'text-emerald-800 bg-emerald-50':'text-slate-400'}">
+                </div>
+            </td>`;
+        });
+        html+='</tr>';
+    }
+    html+='</tbody></table>';
+    container.innerHTML=html;
+
+    // Update day totals
+    dates.forEach(d=>{
+        const ds=formatDateStr(d);
+        const slots=getSlots(ds);
+        const filled=slots.filter(s=>s.sku&&parseFloat(s.qty)>0).length;
+        const el=document.getElementById('day-total-'+ds);
+        if(el)el.textContent=filled>0?`${filled} batch${filled>1?'es':''}`:'';
+    });
+
+    // Update materials panel for checked days
+    updateMaterialsPanel();
+}
+
+function onSlotChange(dateStr,slotIndex,field,value){
+    const slots=getSlots(dateStr);
+    if(!slots[slotIndex])slots[slotIndex]={sku:'',qty:''};
+    slots[slotIndex][field]=value;
+    savePlanning();
+    // Update day total
+    const filled=slots.filter(s=>s.sku&&parseFloat(s.qty)>0).length;
+    const el=document.getElementById('day-total-'+dateStr);
+    if(el)el.textContent=filled>0?`${filled} batch${filled>1?'es':''}`:'';
+    // Update materials if day is checked
+    if(checkedDays[dateStr])updateMaterialsPanel();
+    // Update qty cell color
+    const cell=event?.target;
+    if(cell&&field==='qty'){const v=parseFloat(value);cell.classList.toggle('text-emerald-800',!isNaN(v)&&v>0);cell.classList.toggle('bg-emerald-50',!isNaN(v)&&v>0);cell.classList.toggle('text-slate-400',isNaN(v)||!v);}
+}
+
+function toggleDayCheck(dateStr,isChecked){
+    checkedDays[dateStr]=isChecked;
+    savePlanning();
+    updateMaterialsPanel();
+}
+
+function clearWeek(){
+    if(!confirm('Clear all slots for this week?'))return;
+    getWeekDates().forEach(d=>{const ds=formatDateStr(d);delete planningData[ds];delete checkedDays[ds];});
+    savePlanning();renderPlanning();showToast('Cleared.','info');
+}
+
+/*************************************************************
+ * MATERIALS CALCULATION
+ *************************************************************/
+function calculateMaterials(dateStr){
+    const slots=getSlots(dateStr);
+    const materials={}; // key = ingredientSKU, value = {name, totalQty, unit, cost, stock, productBreakdown:[]}
+
+    slots.forEach(s=>{
+        if(!s.sku||!parseFloat(s.qty))return;
+        const recipe=state.boms[s.sku];
+        if(!recipe)return;
+        const parentQty=state.bomParentQty[s.sku]||1;
+        const scaleFactor=parseFloat(s.qty)/parentQty;
+        const productName=(state.products.find(p=>p.sku===s.sku)||{}).name||s.sku;
+
+        recipe.forEach(ing=>{
+            const needed=ing.qtyRequired*scaleFactor;
+            if(!materials[ing.ingredientSKU]){
+                const ingProd=state.products.find(p=>p.sku===ing.ingredientSKU);
+                materials[ing.ingredientSKU]={
+                    sku:ing.ingredientSKU,
+                    name:ingProd?ingProd.name:(ing.ingredientName||ing.ingredientSKU),
+                    totalQty:0,
+                    unit:ing.unit||'',
+                    cost:ingProd?ingProd.cost:0,
+                    stock:ingProd?ingProd.stock:0,
+                    category:ingProd?ingProd.category:''
+                };
+            }
+            materials[ing.ingredientSKU].totalQty+=needed;
+        });
+    });
+    return materials;
+}
+
+function updateMaterialsPanel(){
+    const panel=document.getElementById('materials-panel');
+    const content=document.getElementById('materials-content');
+    const label=document.getElementById('materials-day-label');
+
+    // Find checked days
+    const checkedDates=getWeekDates().filter(d=>checkedDays[formatDateStr(d)]);
+    if(checkedDates.length===0){panel.classList.add('hidden');return;}
+
+    panel.classList.remove('hidden');
+
+    // Merge materials from all checked days
+    const allMaterials={};
+    const dayLabels=[];
+
+    checkedDates.forEach(d=>{
+        const ds=formatDateStr(d);
+        const dayName=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+        dayLabels.push(dayName);
+        const mats=calculateMaterials(ds);
+        Object.values(mats).forEach(m=>{
+            if(!allMaterials[m.sku])allMaterials[m.sku]={...m,totalQty:0};
+            allMaterials[m.sku].totalQty+=m.totalQty;
+        });
+    });
+
+    label.textContent=dayLabels.join(', ');
+
+    const materials=Object.values(allMaterials).sort((a,b)=>a.name.localeCompare(b.name));
+    let totalCost=0;
+    let rows='';
+    materials.forEach(m=>{
+        const lineCost=m.totalQty*m.cost;
+        totalCost+=lineCost;
+        const isShort=m.stock<m.totalQty;
+        rows+=`<tr class="${isShort?'bg-red-50':'hover:bg-slate-50'}">
+            <td class="py-2 px-3 font-mono text-xs text-slate-600">${m.sku}</td>
+            <td class="py-2 px-3 font-semibold text-slate-800">${m.name}</td>
+            <td class="py-2 px-3 text-center text-xs text-slate-500">${m.category||'-'}</td>
+            <td class="py-2 px-3 text-center font-bold text-sm ${isShort?'text-red-700':'text-emerald-700'}">${Number(m.totalQty).toLocaleString(undefined,{maximumFractionDigits:2})}</td>
+            <td class="py-2 px-3 text-center text-xs text-slate-500">${m.unit}</td>
+            <td class="py-2 px-3 text-center text-xs font-semibold ${m.stock<m.totalQty?'text-red-600':'text-slate-700'}">${Number(m.stock).toLocaleString(undefined,{maximumFractionDigits:1})}</td>
+            <td class="py-2 px-3 text-center text-xs ${isShort?'text-red-600 font-bold':'text-slate-400'}">${isShort?'-'+Number(m.totalQty-m.stock).toLocaleString(undefined,{maximumFractionDigits:2}):'OK'}</td>
+            <td class="py-2 px-3 text-right text-xs font-semibold">$${lineCost.toFixed(2)}</td>
+        </tr>`;
+    });
+
+    content.innerHTML=`
+        <div class="flex items-center gap-4 mb-4">
+            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 flex-1"><span class="text-[11px] font-bold text-slate-400 uppercase block">Unique Ingredients</span><span class="text-lg font-bold text-slate-800">${materials.length}</span></div>
+            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 flex-1"><span class="text-[11px] font-bold text-slate-400 uppercase block">Total Material Cost</span><span class="text-lg font-bold text-slate-800">$${totalCost.toFixed(2)}</span></div>
+            <div class="bg-red-50 p-3 rounded-lg border border-red-200 flex-1"><span class="text-[11px] font-bold text-red-400 uppercase block">Shortages</span><span class="text-lg font-bold text-red-700">${materials.filter(m=>m.stock<m.totalQty).length}</span></div>
+        </div>
+        <div class="overflow-x-auto border border-slate-200 rounded-xl">
+            <table class="w-full text-left text-sm">
+                <thead class="bg-slate-50 text-slate-500 font-medium text-xs uppercase tracking-wider border-b border-slate-200"><tr>
+                    <th class="py-2.5 px-3">SKU</th><th class="py-2.5 px-3">Ingredient</th><th class="py-2.5 px-3 text-center">Category</th><th class="py-2.5 px-3 text-center">Total Needed</th><th class="py-2.5 px-3 text-center">Unit</th><th class="py-2.5 px-3 text-center">In Stock</th><th class="py-2.5 px-3 text-center">Shortage</th><th class="py-2.5 px-3 text-right">Est. Cost</th>
+                </tr></thead>
+                <tbody class="divide-y divide-slate-100">${rows||'<tr><td colspan="8" class="py-6 text-center text-slate-400">No materials needed.</td></tr>'}</tbody>
+            </table>
+        </div>`;
+
+    // Store for export
+    window._lastMaterialsCalc=materials;
+}
+
+function exportMaterialsCSV(){
+    const mats=window._lastMaterialsCalc;
+    if(!mats||!mats.length){showToast('No materials to export. Check a day first.','error');return;}
+    const csv=Papa.unparse(mats.map(m=>({
+        SKU:m.sku,
+        Ingredient:m.name,
+        Category:m.category,
+        'Total_Required':Number(m.totalQty.toFixed(2)),
+        Unit:m.unit,
+        'In_Stock':m.stock,
+        'Shortage':m.stock<m.totalQty?Number((m.totalQty-m.stock).toFixed(2)):0,
+        'Est_Cost':Number((m.totalQty*m.cost).toFixed(2))
+    })));
+    downloadFile(csv,`Materials_Required_${formatDateStr(new Date())}.csv`,'text/csv');
+    showToast('Materials CSV exported!','success');
+}
+
+/*************************************************************
+ * INVENTORY
+ *************************************************************/
+function renderInventory(){
+    const tbody=document.getElementById('inventory-table-body');tbody.innerHTML='';
+    const sq=(document.getElementById('inventory-search').value||'').toLowerCase();
+    const cf=document.getElementById('inventory-category-filter').value;
+    const filtered=state.products.filter(p=>{const ms=p.sku.toLowerCase().includes(sq)||p.name.toLowerCase().includes(sq)||(p.category||'').toLowerCase().includes(sq);const mc=cf==='ALL'||p.category===cf;return ms&&mc;});
+    if(!filtered.length){tbody.innerHTML=`<tr><td colspan="9" class="py-6 text-center text-slate-400">No products.</td></tr>`;return;}
+    filtered.forEach(p=>{
+        const isLow=p.minStock>0&&p.stock<=p.minStock;
+        const tr=document.createElement('tr');tr.className="hover:bg-slate-50 transition-colors";
+        tr.innerHTML=`<td class="py-3 px-4 font-mono font-bold text-xs text-slate-700">${p.sku}</td><td class="py-3 px-4 font-semibold text-slate-800">${p.name}</td><td class="py-3 px-4"><span class="px-2 py-0.5 text-xs rounded-md bg-slate-50 text-slate-700 border border-slate-200">${p.category||'-'}</span></td><td class="py-3 px-4 font-bold text-sm ${isLow?'text-amber-600':'text-slate-800'}">${Number(p.stock).toLocaleString(undefined,{maximumFractionDigits:2})}</td><td class="py-3 px-4 text-xs text-slate-500">${p.uom||'-'}</td><td class="py-3 px-4 text-xs text-slate-700 font-semibold">$${Number(p.cost).toFixed(2)}</td><td class="py-3 px-4 text-xs text-slate-500">${p.minStock}</td><td class="py-3 px-4">${isLow?'<span class="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full font-semibold">Low</span>':'<span class="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-full font-semibold">OK</span>'}</td><td class="py-3 px-4 text-right"><button onclick="quickAdjustStock('${p.sku}')" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded border border-slate-300 font-medium mr-1">Adjust</button><button onclick="deleteProduct('${p.sku}')" class="text-xs text-slate-400 hover:text-red-600 p-1"><i class="fa-solid fa-trash"></i></button></td>`;
+        tbody.appendChild(tr);
+    });
+}
+function quickAdjustStock(sku){const p=state.products.find(x=>x.sku===sku);if(!p)return;const n=prompt(`Stock for "${p.name}" (${p.uom}):`,p.stock);if(n!==null){const v=parseFloat(n);if(!isNaN(v)&&v>=0){p.stock=v;showToast(`Updated ${p.name} to ${v}`,'success');refreshApp();}}}
+function deleteProduct(sku){state.products=state.products.filter(p=>p.sku!==sku);delete state.boms[sku];showToast(`Removed ${sku}`,'info');refreshApp();}
+function exportInventoryCSV(){const csv=Papa.unparse(state.products.map(p=>({Code:p.sku,'Product Name':p.name,Category:p.category,SOH:p.stock,'Option 1':p.uom,'Cost HKD Exempt':p.cost,'Minimum Stock':p.minStock})));downloadFile(csv,`ProductExport-${formatDateStr(new Date())}.csv`,'text/csv');showToast('Exported!','success');}
+
+/*************************************************************
+ * BOM
+ *************************************************************/
+function renderBOMList(){
+    const c=document.getElementById('bom-items-list');c.innerHTML='';
+    const sq=(document.getElementById('bom-search').value||'').toLowerCase();
+    const items=state.products.filter(p=>state.boms[p.sku]);
+    const filtered=items.filter(p=>p.sku.toLowerCase().includes(sq)||p.name.toLowerCase().includes(sq));
+    if(!filtered.length){c.innerHTML=`<div class="text-xs text-slate-400 p-3 text-center">No recipes. Import a BOM CSV.</div>`;return;}
+    filtered.forEach(p=>{
+        const sel=state.selectedBOMSKU===p.sku;
+        const div=document.createElement('div');
+        div.onclick=()=>{state.selectedBOMSKU=p.sku;renderBOMList();renderBOMDetail();};
+        div.className=`p-3 rounded-lg border cursor-pointer transition-all ${sel?'border-emerald-500 bg-emerald-50/40 ring-1 ring-emerald-500':'border-slate-200 bg-white hover:border-slate-300'}`;
+        div.innerHTML=`<div class="flex justify-between items-start mb-1"><span class="font-bold text-xs text-slate-800">${p.name}</span><span class="bg-emerald-100 text-emerald-800 text-[10px] px-1.5 py-0.5 rounded font-bold">${state.boms[p.sku].length} items</span></div><div class="text-[11px] text-slate-500 flex justify-between"><span>${p.sku}</span><span>Stock: ${p.stock} ${p.uom}</span></div>`;
+        c.appendChild(div);
+    });
+}
+function renderBOMDetail(){
+    const container=document.getElementById('bom-detail-container');
+    const sku=state.selectedBOMSKU;
+    if(!sku){container.innerHTML=`<div class="text-center py-20 text-slate-400"><i class="fa-solid fa-flask-vial text-4xl mb-3 opacity-40"></i><p class="text-sm font-medium">Select a recipe.</p></div>`;return;}
+    const parent=state.products.find(p=>p.sku===sku);
+    const ings=state.boms[sku]||[];
+    let totalCost=0,rows='';
+    ings.forEach((ing,i)=>{
+        const ip=state.products.find(p=>p.sku===ing.ingredientSKU);
+        const uc=ip?ip.cost:0;const tc=ing.qtyRequired*uc;totalCost+=tc;
+        rows+=`<tr class="hover:bg-slate-50 text-xs"><td class="py-2.5 px-3 font-mono font-bold text-slate-700">${ing.ingredientSKU}</td><td class="py-2.5 px-3 font-medium text-slate-800">${ip?ip.name:ing.ingredientName||ing.ingredientSKU}</td><td class="py-2.5 px-3 font-bold text-emerald-700">${ing.qtyRequired} ${ing.unit}</td><td class="py-2.5 px-3 text-slate-600">$${uc.toFixed(2)}</td><td class="py-2.5 px-3 font-semibold text-slate-800">$${tc.toFixed(2)}</td><td class="py-2.5 px-3 text-right"><button onclick="removeIng('${sku}',${i})" class="text-slate-400 hover:text-red-600"><i class="fa-solid fa-xmark"></i></button></td></tr>`;
+    });
+    const baseYield=state.bomParentQty[sku];
+    container.innerHTML=`
+        <div class="border-b border-slate-200 pb-4 mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div><span class="text-xs font-bold text-emerald-600 uppercase tracking-wider">Recipe Card</span><h2 class="text-xl font-bold text-slate-800 mt-0.5">${parent?parent.name:sku}</h2><span class="text-xs text-slate-500 font-mono">${sku}</span>${baseYield?`<span class="text-xs text-blue-500 ml-2">(Base yield: ${baseYield})</span>`:''}</div>
+            <div class="flex items-center gap-2"><button onclick="openEditBOMModal('${sku}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium px-3 py-1.5 rounded-lg text-xs border border-slate-200"><i class="fa-solid fa-pen"></i> Edit</button></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><span class="text-[11px] font-bold text-slate-400 uppercase block">Cost / Unit</span><span class="text-lg font-bold text-slate-800">$${totalCost.toFixed(2)}</span></div>
+            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><span class="text-[11px] font-bold text-slate-400 uppercase block">Ingredients</span><span class="text-lg font-bold text-slate-800">${ings.length} Components</span></div>
+            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><span class="text-[11px] font-bold text-slate-400 uppercase block">Stock</span><span class="text-lg font-bold text-emerald-700">${parent?parent.stock:0} ${parent?parent.uom:''}</span></div>
+        </div>
+        <h4 class="font-bold text-xs uppercase tracking-wider text-slate-500 mb-2">Ingredients</h4>
+        <div class="border border-slate-200 rounded-xl overflow-hidden"><table class="w-full text-left"><thead class="bg-slate-50 text-slate-500 font-medium text-xs uppercase border-b border-slate-200"><tr><th class="py-2.5 px-3">SKU</th><th class="py-2.5 px-3">Ingredient</th><th class="py-2.5 px-3">Qty</th><th class="py-2.5 px-3">Unit Cost</th><th class="py-2.5 px-3">Subtotal</th><th class="py-2.5 px-3 text-right">Action</th></tr></thead><tbody class="divide-y divide-slate-100">${rows||'<tr><td colspan="6" class="py-6 text-center text-slate-400 text-xs">No ingredients.</td></tr>'}</tbody></table></div>`;
+}
+function removeIng(sku,i){if(state.boms[sku]){state.boms[sku].splice(i,1);showToast('Removed.','info');refreshApp();}}
+
+/*************************************************************
+ * MODALS
+ *************************************************************/
+function openModal(id){
+    const m=document.getElementById(id);if(!m)return;
+    if(id==='add-bom-modal'){const s=document.getElementById('bom-parent-sku');s.innerHTML='';state.products.forEach(p=>{const o=document.createElement('option');o.value=p.sku;o.textContent=p.name+' ('+p.sku+')';s.appendChild(o);});document.getElementById('bom-ingredients-container').innerHTML='';addBOMIngredientRow();}
+    m.classList.remove('hidden');
+}
+function closeModal(id){const m=document.getElementById(id);if(m)m.classList.add('hidden');}
+function handleSaveProduct(e){
+    e.preventDefault();
+    const sku=document.getElementById('prod-sku').value.trim(),name=document.getElementById('prod-name').value.trim(),cat=document.getElementById('prod-category').value.trim(),stock=parseFloat(document.getElementById('prod-stock').value),uom=document.getElementById('prod-uom').value.trim(),cost=parseFloat(document.getElementById('prod-cost').value),min=parseFloat(document.getElementById('prod-min').value);
+    if(!sku||!name){showToast('Fill fields.','error');return;}
+    const obj={sku,name,category:cat,subCategory:'',stock,uom,cost,minStock:min,supplier:''};
+    const idx=state.products.findIndex(p=>p.sku===sku);
+    if(idx>=0)state.products[idx]={...state.products[idx],...obj};else state.products.push(obj);
+    updateCategoryFilters();closeModal('add-product-modal');showToast(`Saved ${name}`,'success');refreshApp();
+}
+function addBOMIngredientRow(defSKU='',defQty=1,defUnit=''){
+    const c=document.getElementById('bom-ingredients-container');const r=document.createElement('div');r.className='flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200';
+    let opts=state.products.map(p=>`<option value="${p.sku}" ${p.sku===defSKU?'selected':''}>${p.name} (${p.sku})</option>`).join('');
+    r.innerHTML=`<select class="ing-select flex-1 border border-slate-300 rounded p-1 text-xs">${opts}</select><input type="number" step="any" min="0.001" value="${defQty}" class="ing-qty w-20 border border-slate-300 rounded p-1 text-xs"><input type="text" value="${defUnit}" class="ing-unit w-16 border border-slate-300 rounded p-1 text-xs" placeholder="Unit"><button type="button" onclick="this.parentElement.remove()" class="text-slate-400 hover:text-red-600 px-1"><i class="fa-solid fa-xmark"></i></button>`;
+    c.appendChild(r);
+}
+function openEditBOMModal(sku){openModal('add-bom-modal');document.getElementById('bom-parent-sku').value=sku;const c=document.getElementById('bom-ingredients-container');c.innerHTML='';const r=state.boms[sku]||[];if(!r.length)addBOMIngredientRow();else r.forEach(ing=>addBOMIngredientRow(ing.ingredientSKU,ing.qtyRequired,ing.unit));}
+function handleSaveBOM(e){
+    e.preventDefault();const parentSKU=document.getElementById('bom-parent-sku').value;const rows=document.getElementById('bom-ingredients-container').querySelectorAll('.flex');const recipe=[];
+    rows.forEach(r=>{const sku=r.querySelector('.ing-select').value;const qty=parseFloat(r.querySelector('.ing-qty').value);const unit=r.querySelector('.ing-unit').value.trim();if(sku&&!isNaN(qty)&&qty>0){const ip=state.products.find(p=>p.sku===sku);recipe.push({ingredientSKU:sku,ingredientName:ip?ip.name:sku,qtyRequired:qty,unit});}});
+    state.boms[parentSKU]=recipe;state.selectedBOMSKU=parentSKU;closeModal('add-bom-modal');showToast('Recipe saved!','success');refreshApp();
+}
+
+/*************************************************************
+ * UTILITIES
+ *************************************************************/
+function showToast(msg,type='info'){
+    const c=document.getElementById('toast-container');const t=document.createElement('div');
+    const bg={success:'bg-emerald-800 text-white border-emerald-700',error:'bg-red-800 text-white border-red-700',info:'bg-slate-800 text-white border-slate-700'};
+    const icons={success:'fa-circle-check text-emerald-400',error:'fa-triangle-exclamation text-red-400',info:'fa-circle-info text-blue-400'};
+    t.className=`p-3 rounded-xl border shadow-lg flex items-start gap-2.5 text-xs font-medium transition-all transform translate-y-2 opacity-0 ${bg[type]||bg.info}`;
+    t.innerHTML=`<i class="fa-solid ${icons[type]} text-sm mt-0.5"></i><div class="flex-1">${msg}</div><button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>`;
+    c.appendChild(t);setTimeout(()=>t.classList.remove('translate-y-2','opacity-0'),10);setTimeout(()=>{t.classList.add('opacity-0');setTimeout(()=>t.remove(),300);},4000);
+}
+function downloadFile(content,name,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();}
+
+// Drag & Drop
+document.addEventListener('DOMContentLoaded',()=>{
+    ['drop-zone-product','drop-zone-bom'].forEach(id=>{
+        const z=document.getElementById(id);if(!z)return;
+        z.addEventListener('dragover',e=>{e.preventDefault();z.classList.add('drag-over');});
+        z.addEventListener('dragleave',()=>z.classList.remove('drag-over'));
+        z.addEventListener('drop',e=>{e.preventDefault();z.classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f&&f.name.endsWith('.csv')){const t=id.includes('product')?'product':'bom';Papa.parse(f,{header:true,skipEmptyLines:true,dynamicTyping:false,complete(r){if(t==='product')processProductCSV(r.data,f.name);else processBOMCSV(r.data,f.name);}});}});
+    });
+});
+</script>
+</body>
+</html>
